@@ -7,9 +7,17 @@
         \/  \__, |_| |_|_/_/\_\\__,_| |___/ |______|_| |_|\__|_|\__|\__, | |_____/| .__/ \__,_| \_/\_/ |_| |_|\___|_|        \/   |____|
              __/ |                                                   __/ |        | |                                                   
             |___/                                                   |___/         |_|
+    Fixed & Modified by
+      _____                             _     _     _       _     _   
+     |  ___|__   ___ _   _ ___  ___  __| |   | |   (_) __ _| |__ | |_ 
+     | |_ / _ \ / __| | | / __|/ _ \/ _` |   | |   | |/ _` | '_ \| __|
+     |  _| (_) | (__| |_| \__ \  __/ (_| |   | |___| | (_| | | | | |_ 
+     |_|  \___/ \___|\__,_|___/\___|\__,_|___|_____|_|\__, |_| |_|\__|
+                                        |_____|       |___/           
+                                                                    (Unofficial)
 ]]--
 
-if VynixuEntitySpawnerV2 then return VynixuEntitySpawnerV2 end
+if VynixuEntitySpawnerV2butFocusModified then return VynixuEntitySpawnerV2butFocusModified end
 
 -- Services
 local Players = game:GetService("Players")
@@ -28,19 +36,23 @@ local gameStats = ReplicatedStorage:WaitForChild("GameStats")
 local gameData = ReplicatedStorage:WaitForChild("GameData")
 local floorReplicated = ReplicatedStorage:WaitForChild("FloorReplicated")
 local remotesFolder = ReplicatedStorage:WaitForChild("RemotesFolder")
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
 
 local lastRespawn;
 local BaseEntitySpeed = 65
 local colourGuiding = Color3.fromRGB(137, 207, 255)
 local colourCurious = Color3.fromRGB(253, 255, 133)
 
+local achievementGiver = loadstring(game:HttpGet("https://raw.githubusercontent.com/Focuslol666/Utilities/refs/heads/patch-1/Doors/Custom%20Achievements/Source.lua"))()
+
+if not _G.achievementUnlock then
+    _G.achievementUnlock = {}
+end
+
 local vynixuModules = {
 	Functions = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 }
 local assets = {
-	Repentance = LoadCustomInstance("https://raw.githubusercontent.com/VoorPhale012/Crucifix/refs/heads/main/repee.rbxm?raw=true")
+	Repentance = LoadCustomInstance("https://github.com/Focuslol666/Utilities/blob/patch-1/Doors/Entity%20Spawner/Assets/Repentance.rbxm?raw=true")
 }
 local moduleScripts = {
 	Module_Events = require(ReplicatedStorage.ModulesClient.Module_Events),
@@ -62,19 +74,20 @@ local defaultPlayerAttributes = {
 local defaultDebug = {
 	OnSpawned = function() end,
 	OnStartMoving = function() end,
-	OnReachedNode = function() end,
+	OnReachNode = function() end,
 	OnEnterRoom = function() end,
 	OnLookAt = function() end,
 	OnRebounding = function() end,
 	OnDespawning = function() end,
 	OnDespawned = function() end,
 	OnDamagePlayer = function() end,
+	OnCrucified = function() end,
 	CrucifixionOverwrite = ""
 }
 local defaultConfig = {
 	Entity = {
 		Name = "Template Entity",
-		Asset = "https://github.com/RegularVynixu/Utilities/blob/main/Doors%20Entity%20Spawner/Models/Rush.rbxm?raw=true",
+		Asset = "https://github.com/Focuslol666/Utilities/blob/patch-1/Doors%20Entity%20Spawner/Models/Rush.rbxm?raw=true",
 		HeightOffset = 0
 	},
 	Movement = {
@@ -84,8 +97,15 @@ local defaultConfig = {
 	},
 	Damage = {
 		Enabled = true,
+		Killed = false,
 		Range = 40,
-		Amount = 125
+		Amount = 125,
+		Withered = false, -- If true, it take damages to MaxHealth (1~inf)
+		Random = {
+		    Enabled = false,
+		    Min = 1,
+		    Max = 200
+		}
 	},
 	Rebounding = {
 		Enabled = true,
@@ -100,7 +120,19 @@ local defaultConfig = {
 			Duration = 1
 		},
 		Shatter = true,
-		Repair = false
+		Repair = false,
+		ColorCorrection = {
+		    Enabled = false,
+		    Color = Color3.fromRGB(255, 0, 0), -- Color3.new
+		    CameraShake = {10, 5, 2, 5}, -- Magnitude, Roughness, FadeIn, FadeOut
+		    Sound = {
+		        SoundId = "rbxassetid://0",
+		        Volume = 1
+		    },
+		    Duration = 5,
+		    FadeIn = 1,
+		    FadeOut = 2
+		}
 	},
 	Earthquake = {
 		Enabled = true
@@ -110,17 +142,130 @@ local defaultConfig = {
 		Values = {1.5, 20, 0.1, 1}, -- Magnitude, Roughness, FadeIn, FadeOut
 		Range = 100
 	},
+	Jumpscare = {
+	    Enabled = false,
+	    Face = "rbxassetid://0",
+	    FacePosition = UDim2.new(0.5, 0, 0.5, 0),
+	    FaceSize = UDim2.new(0, 150, 0, 150),
+	    BackgroundColor = Color3.new(1, 1, 1), -- Color3.fromRGB
+	    BackgroundColor2 = Color3.new(0, 0, 0), -- Color3.fromRGB
+	    Sound = "rbxassetid://0",
+	    SoundVolume = 5
+	},
+	Achievements = {
+	    Survive = {
+	        Enabled = true,
+	        Once = false,
+	        Title = "Survive Title",
+	        Desc = "Survive Description",
+	        Reason = "Survive Reason",
+	        Image = "rbxassetid://12309073114",
+	        Prize = {
+                Revives = {
+                    Visible = true,
+                    Amount = 1
+                },
+                Knobs = {
+                    Visible = true,
+                    Amount = 100
+                },
+                Stardust = {
+                    Visible = false,
+                    Amount = 20
+                }
+            }
+	    },
+	    Crucifix = {
+	        Enabled = true,
+	        Once = true,
+	        Title = "Crucifix Title",
+	        Desc = "Crucifix Description",
+	        Reason = "Crucifix Reason",
+	        Image = "rbxassetid://12309073114",
+	        Prize = {
+                Revives = {
+                    Visible = true,
+                    Amount = 1
+                },
+                Knobs = {
+                    Visible = true,
+                    Amount = 100
+                },
+                Stardust = {
+                    Visible = true,
+                    Amount = 20
+                }
+            }
+	    },
+	    Death = {
+	        Enabled = false,
+	        Once = false,
+	        Title = "Death Title",
+	        Desc = "Death Description",
+	        Reason = "Death Reason",
+	        Image = "rbxassetid://12309073114",
+	        Prize = {
+                Revives = {
+                    Visible = false,
+                    Amount = 1
+                },
+                Knobs = {
+                    Visible = false,
+                    Amount = 100
+                },
+                Stardust = {
+                    Visible = false,
+                    Amount = 20
+                }
+            }
+	    }
+	},
 	Crucifixion = {
 		Type = "Curious", -- "Guiding"
 		Enabled = true,
 		Range = 40,
 		Resist = false,
-		Break = true
+		Break = true,
+		Tool = {
+		    Name = "Crucifix",
+		    EffectGuiding = Color3.fromRGB(137, 207, 255),
+		    EffectCurious = Color3.fromRGB(253, 255, 133)
+		}
 	},
 	Death = {
+	    IsolationFloors = false,
 		Type = "Guiding", -- "Curious"
-		Hints = {"Death", "Hints", "Go", "Here"},
-        Cause = ""
+		Hints = {--[["Death", "Hints", "Go", "Here"]]},
+        Cause = "",
+        Floors = {
+            Hotel = {
+                Type = "Guiding", -- "Curious"
+		        Hints = {},
+                Cause = ""
+            },
+            Mines = {
+                Type = "Guiding", -- "Curious"
+		        Hints = {},
+                Cause = ""
+            }
+        },
+        Subfloors = {
+            Backdoor = {
+                Type = "Curious", -- "Guiding"
+		        Hints = {},
+                Cause = ""
+            },
+            Rooms = {
+                Type = "Curious", -- "Guiding"
+		        Hints = {},
+                Cause = ""
+            },
+            Outdoors = {
+                Type = "Curious", -- "Guiding"
+		        Hints = {},
+                Cause = ""
+            }
+        }
 	}
 }
 local ambientStorage = {}
@@ -269,12 +414,36 @@ function PlayerInLineOfSight(model, config)
 	return false
 end
 
-function PlayerHasItemEquipped(name)
-	local tool = localChar:FindFirstChildOfClass("Tool")
-	if tool and tool.Name == name then
-		return true, tool
-	end
-	return false
+function UnlockAchievement(achievement)
+    if not achievement or not achievement.Enabled then return end
+    
+    local title = achievement.Title
+    local prize = achievement.Prize
+    
+    local achievementInfo = {
+        Title = title,
+        Desc = achievement.Desc,
+        Reason = achievement.Reason,
+        Image = achievement.Image,
+        Prize = {}
+    }
+    
+    if prize.Revives.Visible then
+        achievementInfo.Prize.Revives = prize.Revives.Amount
+    end
+    if prize.Knobs.Visible then
+        achievementInfo.Prize.Knobs = prize.Knobs.Amount
+    end
+    if prize.Stardust.Visible then
+        achievementInfo.Prize.Stardust = prize.Stardust.Amount
+    end
+    
+    if not achievement.Once then
+        achievementGiver(achievementInfo)
+    elseif not _G.achievementUnlock[title] then
+        achievementGiver(achievementInfo)
+        _G.achievementUnlock[title] = true
+    end
 end
 
 function CrucifixEntity(entityTable, tool)
@@ -282,6 +451,7 @@ function CrucifixEntity(entityTable, tool)
 	local config = entityTable.Config
 
 	local resist = config.Crucifixion.Resist
+    local crucifixAchievement = config.Achievements.Crucifix
 
 	local toolPivot = tool:GetPivot()
 	local entityPivot = model:GetPivot()
@@ -292,15 +462,44 @@ function CrucifixEntity(entityTable, tool)
 	local result = workspace:Raycast(entityPivot.Position, Vector3.new(0, -1000, 0), params)
 	if not result then return end
 
+    if tool and tool.Parent == localChar then
+	    tool:Destroy()
+	end
+
+    local soundInstances = {}
+    for _, descendant in ipairs(model:GetDescendants()) do
+        if descendant:IsA("Sound") then
+            table.insert(soundInstances, {
+                instance = descendant,
+                wasPlaying = descendant.IsPlaying,
+                timePosition = descendant.TimePosition
+            })
+            descendant:Pause()
+        end
+    end
+
 	-- Setup
 	model:SetAttribute("BeingBanished", true)
+    task.spawn(entityTable.RunCallback, entityTable, "OnCrucified", resist) -- OnCrucified
 
 	local repentance = assets.Repentance:Clone()
 	local crucifix = repentance.Crucifix
+	local crucHandle = crucifix.Handle
 	local pentagram = repentance.Pentagram
 	local entityPart = repentance.Entity
-	local sound = (config.Crucifixion.Resist and crucifix.SoundFail or crucifix.Sound)
+	local sound = (config.Crucifixion.Resist and crucHandle.SoundFail or crucHandle.Sound)
 	local shaker = moduleScripts.Main_Game.camShaker:StartShake(5, 20, 2, Vector3.new())
+
+	local toolConfig = config.Crucifixion.Tool
+	local guidingColor = colourGuiding
+	local curiousColor = colourCurious
+	
+	if toolConfig.EffectGuiding and typeof(toolConfig.EffectGuiding) == "Color3" then
+		guidingColor = toolConfig.EffectGuiding
+	end
+	if toolConfig.EffectCurious and typeof(toolConfig.EffectCurious) == "Color3" then
+		curiousColor = toolConfig.EffectCurious
+	end
 
 	local function waitUntil(t)
 		repeat RunService.RenderStepped:Wait() until sound.TimePosition >= t
@@ -318,45 +517,97 @@ function CrucifixEntity(entityTable, tool)
 	end
 
 	repentance:PivotTo(CFrame.new(result.Position))
-	crucifix.CFrame = toolPivot
+	crucifix:PivotTo(toolPivot)
 	repentance.Entity.CFrame = entityPivot
-    crucifix.BodyPosition.Position = (localCollision.CFrame * CFrame.new(0.5, 3, -6)).Position
+    crucHandle.BodyPosition.Position = (localCollision.CFrame * CFrame.new(0.5, 3, -6)).Position
 	repentance.Parent = workspace
 	sound:Play()
-game.Workspace.RepentanceNEW.Crucifix.Color = Color3.fromRGB(255, 0, 0)
-game.Workspace.RepentanceNEW.Crucifix.ExplodeParticle.Brightness = 0.1
 
-local crucifixTool = character:WaitForChild("Crucifix",10000000000000000000000000000000)
-
-if not crucifixTool then
-    crucifixTool = player.Backpack:WaitForChild("Crucifix",1000000000000000000000000000)
-end
-
-if crucifixTool then
-    crucifixTool:Destroy()
-end
-
-task.spawn(function()
+	task.spawn(function()
 		while model.Parent and repentance.Parent do
 			model:PivotTo(entityPart.CFrame)
 			task.wait()
 		end
-		model:Destroy()
+
+		if resist == false then
+		    model:Destroy()
+		end
 	end)
 
 	-- Animation
 	TweenService:Create(pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
-	TweenService:Create(crucifix.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
+	TweenService:Create(crucHandle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
 	task.delay(2, pentagram.Circle.Destroy, pentagram.Circle)
+
+    task.spawn(function()
+        for _, d in repentance:GetDescendants() do
+            if d:IsA("Beam") then
+                d.Enabled = true
+            end
+        end
+    end)
 
 	task.spawn(function()
 		waitUntil(2.625)
+		if config.Crucifixion.Type:lower() == "curious" then
+		    task.spawn(function()
+                local color = Instance.new("Color3Value")
+                color.Value = guidingColor
+
+                local tween = TweenService:Create(color, TweenInfo.new(1.5, Enum.EasingStyle.Sine), { 
+                    Value = curiousColor
+                })
+                tween:Play()
+
+                while tween.PlaybackState == Enum.PlaybackState.Playing do
+                    for _, d in repentance:GetDescendants() do
+                        if d.ClassName == "Beam" or d.ClassName == "ParticleEmitter" then
+                            d.Color = ColorSequence.new{
+                                ColorSequenceKeypoint.new(0, color.Value),
+                                ColorSequenceKeypoint.new(1, color.Value)
+                            }
+                        elseif d.Name == "Glow" then
+                            d.Color = color.Value
+                        end
+                    end
+
+                    if pentagram.Base.LightAttach.LightBright then
+                        pentagram.Base.LightAttach.LightBright.Color = color.Value
+                    end
+
+                    if crucHandle.Light then
+                        crucHandle.Light.Color = color.Value
+                    end
+                    task.wait()
+                end
+            end)
+        else
+            for _, d in repentance:GetDescendants() do
+                if d.ClassName == "Beam" or d.ClassName == "ParticleEmitter" then
+                    d.Color = ColorSequence.new{
+                        ColorSequenceKeypoint.new(0, guidingColor),
+                        ColorSequenceKeypoint.new(1, guidingColor)
+                    }
+                elseif d.Name == "Glow" then
+                    d.Color = guidingColor
+                end
+            end
+
+            if pentagram.Base.LightAttach.LightBright then
+                pentagram.Base.LightAttach.LightBright.Color = guidingColor
+            end
+
+            if crucHandle.Light then
+                crucHandle.Light.Color = guidingColor
+            end
+        end
+            
 		TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), {
-			Brightness = 3,
+			Brightness = 5,
 			Range = 40
 		}):Play()
-		TweenService:Create(crucifix.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), {
-			Brightness = 1,
+		TweenService:Create(crucHandle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), {
+			Brightness = 11.25,
 			Range = 30
 		}):Play()
 		task.wait(1.5)
@@ -364,16 +615,16 @@ task.spawn(function()
 			Brightness = 0,
 			Range = 0
 		}):Play()
-		TweenService:Create(crucifix.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), {
+		TweenService:Create(crucHandle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), {
 			Brightness = 0,
 			Range = 0
 		}):Play()
 
 		if resist == false then
-			TweenService:Create(crucifix.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 1, Range = 1 }):Play()
+			TweenService:Create(crucHandle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
 			shaker:StartFadeOut(3)
 			fadeOut()
-			TweenService:Create(crucifix.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { AngularVelocity = Vector3.new() }):Play()
+			TweenService:Create(crucHandle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { AngularVelocity = Vector3.new() }):Play()
 		end
 	end)
 
@@ -384,23 +635,23 @@ task.spawn(function()
 		waitUntil(6.75)
 	else
 		waitUntil(4)
-		TweenService:Create(crucifix.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { AngularVelocity = Vector3.new() }):Play()
+		TweenService:Create(crucHandle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { AngularVelocity = Vector3.new() }):Play()
 		TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0, Color = Color3.fromRGB(255, 116, 130) }):Play()
-		TweenService:Create(crucifix.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0, Color = Color3.fromRGB(255, 116, 130) }):Play()
+		TweenService:Create(crucHandle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0, Color = Color3.fromRGB(255, 116, 130) }):Play()
 		shaker:StartFadeOut(3)
 		task.spawn(function()
 			local color = Instance.new("Color3Value")
-			color.Value = Color3.fromRGB(255, 0, 0)
+			color.Value = guidingColor
 
 			local tween = TweenService:Create(color, TweenInfo.new(0.5, Enum.EasingStyle.Sine), { Value = Color3.fromRGB(255, 116, 130) })
 			tween:Play()
 
 			while tween.PlaybackState == Enum.PlaybackState.Playing do
 				for _, d in repentance:GetDescendants() do
-					if d.ClassName == "Beam" then
+					if d.ClassName == "Beam" or d.ClassName == "ParticleEmitter" then
 						d.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, color.Value), ColorSequenceKeypoint.new(1, color.Value)}
 
-					elseif d.Name == "Crucifix" then
+					elseif d.Name == "Glow" then
 						d.Color = color.Value
 					end
 				end
@@ -408,73 +659,254 @@ task.spawn(function()
 			end
 		end)
 		waitUntil(9.625)
+		task.spawn(function()
+		    for _, soundData in ipairs(soundInstances) do
+                if soundData.instance and soundData.instance.Parent then
+                    if soundData.wasPlaying then
+                        soundData.instance.TimePosition = soundData.timePosition
+                        soundData.instance:Play()
+                    end
+                end
+            end
+        end)
 	end
 
 	-- Crucifix explode
-	TweenService:Create(repentance.Crucifix, TweenInfo.new(1), { Size = repentance.Crucifix.Size * 3, Transparency = 1 }):Play()
-	TweenService:Create(repentance.Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
-	TweenService:Create(repentance.Crucifix.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+	crucHandle.Shards:Destroy()
+	
+	TweenService:Create(crucHandle.Glow, TweenInfo.new(1), { Size = crucHandle.Glow.Size * 3, Transparency = 1 }):Play()
+	TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+	TweenService:Create(crucHandle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
 
 	if not resist then
-		repentance.Crucifix.ExplodeParticle:Emit(math.random(20, 30))
+		crucHandle.ExplodeParticle:Emit(math.random(20, 30))
 		moduleScripts.Main_Game.camShaker:ShakeOnce(7.5, 7.5, 0.25, 1.5)
+		UnlockAchievement(crucifixAchievement)
 	else
 		model:SetAttribute("BeingBanished", false)
 		model:SetAttribute("Paused", false)
 		fadeOut()
+		UnlockAchievement(crucifixAchievement)
 	end
-	task.delay(5, repentance.Destroy, repentance)
+	
+	if resist == false then
+	    task.delay(5, repentance.Destroy, repentance)
+	else
+	    for _, d in repentance:GetDescendants() do
+            if d:IsA("Sound") then
+                d.Parent = model
+                d.Ended:Connect(d.Destory, d)
+            end
+        end
+        task.delay(1, repentance.Destroy, repentance)
+	end
 end
 
 function PlayerIsProtected()
 	return (tick() - lastRespawn) <= localPlayer:GetAttribute("SpawnProtection")
 end
 
+function CreateJumpscare(jumpscareConfig)
+    local JumpscareGui = Instance.new("ScreenGui")
+    local Background = Instance.new("Frame")
+    local Face = Instance.new("ImageLabel")
+    local scareSound = Instance.new("Sound")
+    
+    JumpscareGui.Name = "JumpscareGui"
+    JumpscareGui.IgnoreGuiInset = true
+    JumpscareGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    JumpscareGui.Parent = playerGui
+    JumpscareGui.Enabled = true
+
+    Background.Name = "Background"
+    Background.BackgroundColor3 = jumpscareConfig.BackgroundColor
+    Background.BorderSizePixel = 0
+    Background.Size = UDim2.new(1, 0, 1, 0)
+    Background.ZIndex = 999
+
+    Face.Name = "Face"
+    Face.AnchorPoint = Vector2.new(0.5, 0.5)
+    Face.BackgroundTransparency = 1
+    Face.Position = jumpscareConfig.FacePosition
+    Face.ResampleMode = Enum.ResamplerMode.Pixelated
+    Face.Size = jumpscareConfig.FaceSize
+    Face.Image = jumpscareConfig.Face
+    Face.ImageTransparency = 1
+
+    scareSound.Name = "Scare"
+    scareSound.SoundId = jumpscareConfig.Sound
+    scareSound.Volume = jumpscareConfig.SoundVolume
+    scareSound.Parent = JumpscareGui
+
+    Background.Parent = JumpscareGui
+    Face.Parent = Background
+	
+	task.spawn(function()
+		local startTime = tick()
+		while tick() - startTime < 0.8 do
+			Background.BackgroundColor3 = jumpscareConfig.BackgroundColor
+			task.wait(math.random(25, 100) / 1000)
+			Background.BackgroundColor3 = jumpscareConfig.BackgroundColor2
+			task.wait(math.random(25, 100) / 1000)
+		end
+	end)
+
+	Face.ImageTransparency = 0
+	TweenService:Create(Face, TweenInfo.new(0.7), {
+		Size = UDim2.new(0, 2450, 0, 1550),
+	}):Play()
+	scareSound:Play()
+	
+	task.delay(0.8, function()
+		JumpscareGui:Destroy()
+	end)
+end
+
+function SetDeathHints(entityTable)
+	local config = entityTable.Config
+	local deathHints = config.Death.Hints
+	local deathType = config.Death.Type
+	local deathCause = config.Death.Cause
+
+	if config.Death.IsolationFloors then
+		local currentFloor = gameData.Floor.Value
+		local floorConfig = config.Death.Floors[currentFloor]
+		local subfloorConfig = config.Death.Subfloors[currentFloor]
+
+		if floorConfig and #floorConfig.Hints > 0 then
+			deathHints = floorConfig.Hints
+			deathType = floorConfig.Type
+			if floorConfig.Cause ~= "" then
+				deathCause = floorConfig.Cause
+			end
+		elseif subfloorConfig and #subfloorConfig.Hints > 0 then
+			deathHints = subfloorConfig.Hints
+			deathType = subfloorConfig.Type
+			if subfloorConfig.Cause ~= "" then
+				deathCause = subfloorConfig.Cause
+			end
+		elseif currentFloor == "Garden" then
+			local outdoorsConfig = config.Death.Subfloors.Outdoors
+			if outdoorsConfig and #outdoorsConfig.Hints > 0 then
+				deathHints = outdoorsConfig.Hints
+				deathType = outdoorsConfig.Type
+				if outdoorsConfig.Cause ~= "" then
+					deathCause = outdoorsConfig.Cause
+				end
+			end
+		else
+			if currentFloor ~= "Hotel" and currentFloor ~= "Mines" and currentFloor ~= "Backdoor" and currentFloor ~= "Rooms" and currentFloor ~= "Garden" then
+				warn("Error Floor: "..currentFloor.." does not exist and has been switched to the default death hints.")
+			end
+		end
+	end
+	
+	if #deathHints > 0 then
+		-- Get death type
+		local colour;
+		for name, values in deathTypes do
+			if table.find(values, deathType:lower()) then
+				colour = name
+			end
+		end
+		if not colour then
+			for _, c in playerGui.MainUI.Initiator.Main_Game.Health.Music:GetChildren() do
+				if c.Name:lower() == deathType:lower() then
+					colour = c.Name
+				end
+			end
+		end
+		if not colour then
+			colour = "Blue"
+		end
+		
+		-- Set death hints and type (thanks oogy)
+		if firesignal then
+			firesignal(remotesFolder.DeathHint.OnClientEvent, deathHints, colour)
+		else
+			warn("firesignal not supported, ignore death hints.")
+		end
+	end
+
+	-- Set death cause
+	if deathCause == "" then
+		deathCause = config.Entity.Name
+	end
+	gameStats["Player_".. localPlayer.Name].Total.DeathCause.Value = deathCause
+end
+
 function DamagePlayer(entityTable)
 	if localHum.Health > 0 and not PlayerIsProtected() then
 		local config = entityTable.Config
-		local newHealth = math.clamp(localHum.Health - config.Damage.Amount, 0, localHum.MaxHealth)
-
-		if newHealth == 0 then
-			-- Death hints
-			if #config.Death.Hints > 0 then
-				-- Get death type
-				local colour;
-				for name, values in deathTypes do
-					if table.find(values, config.Death.Type:lower()) then
-						colour = name
-					end
-				end
-				if not colour then
-					for _, c in playerGui.MainUI.Initiator.Main_Game.Health.Music:GetChildren() do
-						if c.Name:lower() == config.Death.Type:lower() then
-							colour = c.Name
-						end
-					end
-				end
-				if not colour then
-					colour = "Blue"
+		local deathAchievement = config.Achievements.Death
+		
+		if config.Damage.Killed then
+			if replicatesignal then
+				replicatesignal(localPlayer.Kill)
+			else
+				warn("replicatesignal not supported, set Health to 0.")
+				localHum.Health = 0
+				localPlayer:SetAttribute("Alive", false)
+			end
+			
+			-- Jumpscare
+			if config.Jumpscare.Enabled then
+				CreateJumpscare(config.Jumpscare)
+			end
+			
+			-- Achievement
+			UnlockAchievement(deathAchievement)
+			
+			-- Death hints & Cause
+			SetDeathHints(entityTable)
+			
+			task.spawn(entityTable.RunCallback, entityTable, "OnDamagePlayer", 0, 0, false) -- OnDamagePlayer
+		else
+			local damageAmount;
+			
+			if config.Damage.Random.Enabled then
+				damageAmount = math.random(config.Damage.Random.Min, config.Damage.Random.Max)
+			else
+				damageAmount = config.Damage.Amount
+			end
+			
+			damageAmount = math.max(0, damageAmount)
+			
+			local newHealth;
+			
+			if config.Damage.Withered then
+				damageAmount = math.max(1, damageAmount)
+				
+				local newMaxHealth = math.max(0, localHum.MaxHealth - damageAmount)
+				localHum.MaxHealth = newMaxHealth
+				
+				if localHum.Health > newMaxHealth then
+					localHum.Health = newMaxHealth
 				end
 				
-				-- Set death hints and type (thanks oogy)
-				if firesignal then
-					firesignal(remotesFolder.DeathHint.OnClientEvent, config.Death.Hints, colour)
-				else
-					warn("firesignal not supported, ignore death hints.")
+				newHealth = localHum.Health
+			else
+				newHealth = math.clamp(localHum.Health - damageAmount, 0, localHum.MaxHealth)
+				localHum.Health = newHealth
+			end
+
+			if newHealth == 0 then
+				localPlayer:SetAttribute("Alive", false)
+					
+				-- Jumpscare
+				if config.Jumpscare.Enabled then
+					CreateJumpscare(config.Jumpscare)
 				end
+				
+				-- Achievement
+				UnlockAchievement(deathAchievement)
+
+                -- Death hints & Cause
+				SetDeathHints(entityTable)
 			end
 
-			-- Set death cause
-			local deathCause = config.Entity.Name
-			if config.Death.Cause ~= "" then
-				deathCause = config.Death.Cause
-			end
-			gameStats["Player_".. localPlayer.Name].Total.DeathCause.Value = deathCause
+			task.spawn(entityTable.RunCallback, entityTable, "OnDamagePlayer", newHealth, damageAmount, config.Damage.Withered) -- OnDamagePlayer
 		end
-
-		-- Update health
-		localHum.Health = newHealth
-		task.spawn(entityTable.RunCallback, entityTable, "OnDamagePlayer", newHealth) -- OnDamagePlayer
 	end
 end
 
@@ -517,7 +949,7 @@ function FixRoomLights(room)
     end
     
     -- Set room ambient
-    require(ReplicatedStorage.ClientModules.Module_Events).toggle(room, true, ambientStorage[room])
+    require(ReplicatedStorage.ModulesClient.Module_Events).toggle(room, true, ambientStorage[room])
 
     -- Fix lights
     local stuff = {}
@@ -560,8 +992,13 @@ function FixRoomLights(room)
     end
 end
 
-function EntityMoveTo(model, cframe, speed)
+function GetDistanceToPlayer(model)
+    return (localCollision.Position - model:GetPivot().Position).Magnitude
+end
+
+function EntityMoveTo(model, cframe, speed, config, entityTable)
 	local reached = false
+	local originalCFrame = cframe
 	local connection; connection = RunService.Stepped:Connect(function(_, step)
 		if not model:GetAttribute("Paused") then
 			local pivot = model:GetPivot()
@@ -737,11 +1174,19 @@ spawner.Create = function(config)
 					self.Model:SetAttribute("Paused", bool)
 				end
 			end,
-			Despawn = function(self)
+			Despawn = function(self, skipDespawningCallback)
 				if self.Model then
+					if not skipDespawningCallback then
+						task.spawn(self.RunCallback, self, "OnDespawning") -- OnDespawning
+					end
+					
 					self.Model:Destroy()
 					self.Model = nil
 					task.spawn(self.RunCallback, self, "OnDespawned") -- OnDespawned
+					local surviveAchievement = config.Achievements.Survive
+                    if surviveAchievement.Enabled and localHum.Health > 0 then
+                        UnlockAchievement(surviveAchievement)
+                    end
 				end
 			end
 		}
@@ -778,6 +1223,52 @@ spawner.Run = function(entityTable)
 		end
 	
 		if spawnPoint then
+		    -- Color Correction effect
+		    if config.Lights.ColorCorrection.Enabled then
+                local colorCorrection = Instance.new("ColorCorrectionEffect")
+                colorCorrection.Name = "EntityEffect"
+                colorCorrection.TintColor = config.Lights.ColorCorrection.Color
+                colorCorrection.Parent = localCamera
+                
+                colorCorrection.Enabled = false
+                task.spawn(function()
+                    if config.Lights.ColorCorrection.Sound and config.Lights.ColorCorrection.Sound.SoundId then
+                        local sound = Instance.new("Sound")
+                        sound.SoundId = config.Lights.ColorCorrection.Sound.SoundId
+                        sound.Volume = config.Lights.ColorCorrection.Sound.Volume
+                        sound.Parent = localCamera
+                        sound:Play()
+                        
+                        task.delay(config.Lights.ColorCorrection.Duration, sound.Destroy, sound)
+                    end
+                    
+                    colorCorrection.Enabled = true
+                    TweenService:Create(colorCorrection, TweenInfo.new(config.Lights.ColorCorrection.FadeIn, Enum.EasingStyle.Linear), {
+                        TintColor = config.Lights.ColorCorrection.Color
+                    }):Play()
+                    
+                    task.wait(config.Lights.ColorCorrection.Duration - config.Lights.ColorCorrection.FadeIn - config.Lights.ColorCorrection.FadeOut)
+                    
+                    TweenService:Create(colorCorrection, TweenInfo.new(config.Lights.ColorCorrection.FadeOut, Enum.EasingStyle.Linear), {
+                        TintColor = Color3.new(1, 1, 1)
+                    }):Play()
+                    
+                    task.wait(config.Lights.ColorCorrection.FadeOut)
+                    colorCorrection:Destroy()
+                end)
+                
+                local CameraShaker = require(ReplicatedStorage.CameraShaker)
+                local cameraShake = config.Lights.ColorCorrection.CameraShake
+                
+                local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
+                    localCamera.CFrame = localCamera.CFrame * shakeCf
+                end)
+                camShake:Start()
+                camShake:ShakeOnce(cameraShake)
+                
+                task.wait(config.Lights.ColorCorrection.Duration)
+            end
+            
 			-- Spawning
 			model:PivotTo(spawnPoint.CFrame + Vector3.new(0, config.Entity.HeightOffset, 0))
 			model.Parent = workspace
@@ -849,7 +1340,12 @@ spawner.Run = function(entityTable)
 						do
 							local c = config.Crucifixion
 							if c.Enabled and c.Range > 0 and (charPivot.Position - pivot.Position).Magnitude <= c.Range and inSight then
-								local hasTool, tool = PlayerHasItemEquipped("Crucifix")
+                                local t = c.Tool
+                                local toolName = "Crucifix"
+                                if t.Name and typeof(t.Name) == "string" and t.Name ~= "" then
+                                    toolName = t.Name
+                                end
+                                local hasTool, tool = PlayerHasItemEquipped(toolName)
 								if hasTool and tool and not model:GetAttribute("BeingBanished") then
 									-- Crucifixion
 									if typeof(debug.CrucifixionOverwrite) == "function" then
@@ -900,10 +1396,12 @@ spawner.Run = function(entityTable)
 				if reboundType == "blitz" then
 					-- Blitz rebounding
 					local nodesToCurrent, nodesToEnd = GetPathfindNodesBlitz(config)
-	
+					
+					local movementSpeed = config.Movement.Speed
+
 					for _, n in nodesToCurrent do
 						local cframe = n.CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-						EntityMoveTo(model, cframe, config.Movement.Speed)
+						EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 						task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 					end
 					
@@ -938,7 +1436,7 @@ spawner.Run = function(entityTable)
 							local nodeIndex = tonumber(randomNode.Name)
 							for i = #roomNodes, nodeIndex, -1 do
 								local cframe = roomNodes[math.clamp(i, 1, #roomNodes)].CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-								EntityMoveTo(model, cframe, config.Movement.Speed)
+								EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 								task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 							end
 							
@@ -948,7 +1446,7 @@ spawner.Run = function(entityTable)
 		
 							for i = nodeIndex, #roomNodes, 1 do
 								local cframe = roomNodes[math.clamp(i, 1, #roomNodes)].CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-								EntityMoveTo(model, cframe, config.Movement.Speed)
+								EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 								task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 							end
 						end
@@ -957,15 +1455,18 @@ spawner.Run = function(entityTable)
 					local _, updatedToEnd = GetPathfindNodesBlitz(config)
 					for _, n in updatedToEnd do
 						local cframe = n.CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-						EntityMoveTo(model, cframe, config.Movement.Speed)
+						EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 						task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 					end
 				else
 					-- Ambush rebounding
 					local pathfindNodes = GetPathfindNodesAmbush(config)
+					
+					local movementSpeed = config.Movement.Speed
+
 					for _, n in pathfindNodes do
 						local cframe = n.CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-						EntityMoveTo(model, cframe, config.Movement.Speed)
+						EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 						task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 					end
 					
@@ -980,7 +1481,7 @@ spawner.Run = function(entityTable)
 							-- Run backwards through nodes
 							for i = #pathfindNodes, 1, -1 do
 								local cframe = pathfindNodes[i].CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-								EntityMoveTo(model, cframe, config.Movement.Speed)
+								EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 								task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 							end
 	
@@ -993,7 +1494,7 @@ spawner.Run = function(entityTable)
 							-- Run forwards through nodes
 							for _, n in pathfindNodes do
 								local cframe = n.CFrame + Vector3.new(0, 3 + config.Entity.HeightOffset, 0)
-								EntityMoveTo(model, cframe, config.Movement.Speed)
+								EntityMoveTo(model, cframe, movementSpeed, config, entityTable)
 								task.spawn(entityTable.RunCallback, entityTable, "OnReachNode", n) -- OnReachNode
 							end
 	
@@ -1010,9 +1511,10 @@ spawner.Run = function(entityTable)
 				-- Despawning
 				if not model:GetAttribute("Despawning") then
 					model:SetAttribute("Despawning", true)
+					
 					task.spawn(entityTable.RunCallback, entityTable, "OnDespawning") -- OnDespawning
 					EntityMoveTo(model, model:GetPivot() - Vector3.new(0, 300, 0), config.Movement.Speed)
-					entityTable:Despawn()
+					entityTable:Despawn(true)
 				end
 			end)
 		end
@@ -1048,5 +1550,5 @@ if not vynixu_SpawnerLoaded then
 end
 
 -- Return spawner
-getgenv().VynixuEntitySpawnerV2 = spawner
+getgenv().VynixuEntitySpawnerV2butFocusModified = spawner
 return spawner
